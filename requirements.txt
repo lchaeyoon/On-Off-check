@@ -1,3 +1,5 @@
-streamlit
-pandas
-openpyxl
+streamlit==1.31.1
+pandas==2.1.4
+pyarrow==14.0.1
+openpyxl==3.1.2
+pytz==2023.3.post1
