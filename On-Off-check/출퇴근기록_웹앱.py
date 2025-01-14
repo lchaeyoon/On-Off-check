@@ -10,9 +10,12 @@ from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import win32evtlog
-import win32evtlogutil
-import win32con
+
+# Windows 환경에서만 import
+if os.name == 'nt':
+    import win32evtlog
+    import win32evtlogutil
+    import win32con
 
 def load_custom_holidays():
     """자체 휴가 목록 로드"""
