@@ -285,8 +285,11 @@ def calculate_weekly_stats(daily_records):
     return sorted(result, key=lambda x: x['주차'], reverse=True)
 
 def get_computer_info():
-    """��라우드 환경에서는 고정된 값 반환"""
-    return "Streamlit Cloud"
+    """PC 정보 반환"""
+    try:
+        return platform.node()  # 실제 PC 장치명 반환
+    except:
+        return "알 수 없음"
 
 def update_google_sheet(records, employee_name):
     """구글 시트 업데이트 함수 수정"""
@@ -482,7 +485,7 @@ def main():
                 date = event['time'].strftime('%Y-%m-%d')
                 if date in daily_records and not is_holiday(event['time']):  # 공휴일이 아닌 경우만 처리
                     # 평일인 경우 정상적으로 PC 시작/종료 시간 기록
-                    time_str = format_time(event['time'].strftime('%H:%M'))  # 시간 형식 변환
+                    time_str = format_time(event['time'].strftime('%H:%M'))  # 시간 형식 변환환환
                     if event['type'] == '시작':
                         daily_records[date]['PC 시작'] = time_str
                     else:
