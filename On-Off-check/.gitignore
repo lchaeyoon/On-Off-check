@@ -4,3 +4,5 @@ __pycache__/
 *.db
 attendance_log.csv
 colab-408723-89110ae33a5b.json 
+.streamlit/secrets.toml
+custom_holidays.csv 
