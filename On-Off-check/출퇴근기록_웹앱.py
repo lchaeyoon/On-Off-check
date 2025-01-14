@@ -127,15 +127,13 @@ def get_local_pc_events(start_date=None, end_date=None):
     try:
         # Windows 환경인 경우 실제 이벤트 로그 사용
         if os.name == 'nt':
+            st.write("Windows 환경 감지됨")  # 디버깅
+            computer_name = platform.node()
             try:
-                server = None  # 로컬 컴퓨터
-                logtype = "System"  # 시스템 로그
-                hand = win32evtlog.OpenEventLog(server, logtype)
-                
+                hand = win32evtlog.OpenEventLog(None, "System")
                 flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-                total_records = win32evtlog.GetNumberOfEventLogRecords(hand)
-                
-                st.info(f"총 {total_records}개의 이벤트 로그를 확인합니다...")
+                total = win32evtlog.GetNumberOfEventLogRecords(hand)
+                st.write(f"총 {total}개의 이벤트 로그 발견")  # 디버깅
                 
                 while True:
                     events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
@@ -145,9 +143,9 @@ def get_local_pc_events(start_date=None, end_date=None):
                     for event in events_raw:
                         try:
                             event_id = event.EventID & 0xFFFF
-                            # 시스템 시작/종료 관련 모든 이벤트 ID 포함
-                            if event_id in [6005, 6006, 6008, 6009, 6013, 1074, 1076, 12, 13]:
+                            if event_id in [6005, 6006, 6008, 6009, 1074]:  # 더 많은 이벤트 ID 추가
                                 event_date = event.TimeGenerated.replace(tzinfo=None)
+                                st.write(f"이벤트 발견: ID {event_id}, 시간 {event_date}")  # 디버깅
                                 
                                 if start_date and end_date:
                                     start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -155,39 +153,30 @@ def get_local_pc_events(start_date=None, end_date=None):
                                     if not (start_dt <= event_date <= end_dt):
                                         continue
                                 
-                                # 이벤트 타입 결정
-                                if event_id in [6005, 6009, 6013, 12]:  # 시스템 시작 이벤트
-                                    event_type = '시작'
-                                else:  # 시스템 종료 이벤트
-                                    event_type = '종료'
-                                
+                                event_type = '시작' if event_id in [6005, 6009] else '종료'
                                 events.append({
                                     'time': event_date,
                                     'type': event_type,
                                     'event_id': event_id,
-                                    'computer': platform.node()
+                                    'computer': computer_name
                                 })
-                                
-                                # 디버깅을 위한 이벤트 정보 출력
-                                st.write(f"이벤트 발견: ID {event_id}, 시간 {event_date}, 타입 {event_type}")
-                                
                         except Exception as e:
-                            st.error(f"이벤트 처리 중 오류: {str(e)}")
+                            st.write(f"이벤트 처리 중 오류: {str(e)}")  # 디버깅
                             continue
-                
+                            
                 win32evtlog.CloseEventLog(hand)
                 
-                if not events:
-                    st.warning("Windows 이벤트 로그에서 PC 사용 기록을 찾을 수 없습니다.")
-                else:
-                    st.success(f"{len(events)}개의 PC 사용 기록을 찾았습니다.")
-                
             except Exception as e:
-                st.error(f"Windows 이벤트 로그 접근 오류: {str(e)}")
+                st.write(f"이벤트 로그 접근 오류: {str(e)}")  # 디버깅
                 return []
-        
-        # Windows가 아닌 환경(Streamlit Cloud 등)에서는 더미 데이터 생성
+                
+            if not events:
+                st.write("이벤트를 찾지 못했습니다")  # 디버깅
+            else:
+                st.write(f"{len(events)}개의 이벤트를 찾았습니다")  # 디버깅
         else:
+            st.write("Windows 환경이 아님")  # 디버깅
+            # Windows가 아닌 환경(Streamlit Cloud 등)에서는 더미 데이터 생성
             if start_date and end_date:
                 current_date = datetime.strptime(start_date, '%Y-%m-%d')
                 end_dt = datetime.strptime(end_date, '%Y-%m-%d')
@@ -259,7 +248,7 @@ def calculate_work_hours(start_time, end_time, date):
     lunch_start = start_time.replace(hour=12, minute=0, second=0)
     lunch_end = start_time.replace(hour=13, minute=0, second=0)
     
-    # 근무시간이 점심심심시간을 포함하는 경우
+    # 근무시간이 점심심심시간을 포포함하는 경우
     if start_time <= lunch_start and end_time >= lunch_end:
         total_seconds -= 3600  # 1시간(3600초) 제외
     
@@ -379,7 +368,7 @@ def update_google_sheet(records, employee_name):
         values = []
         computer_name = get_computer_info()
         
-        # 각 레코드의 주차차 정보 계산
+        # 각 레코드의 주차차 정보보 계산
         for record in records:
             date = record.get('날짜', '')
             monday, friday = get_week_range(date)
