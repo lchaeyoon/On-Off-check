@@ -416,7 +416,7 @@ def update_google_sheet(records, employee_name):
         
         # 스프레드시트 ID와 범위 지정
         SPREADSHEET_ID = '1-xF7-9VK3Ty5-ARnp0RSqyzrYJXmhW1phaPZTX42SLs'
-        SHEET_NAME = '출퇴근관'
+        SHEET_NAME = '출퇴근관리'
         START_ROW = 5  # 데이터 시작 행
         
         # 데이터 포맷팅
