@@ -143,7 +143,7 @@ def get_local_pc_events(start_date=None, end_date=None):
                     for event in events_raw:
                         try:
                             event_id = event.EventID & 0xFFFF
-                            if event_id in [6005, 6006, 6008, 6009, 1074]:  # 더 많은 이벤트 ID 추가
+                            if event_id in [6005, 6006, 6008, 6009, 1074]:
                                 event_date = event.TimeGenerated.replace(tzinfo=None)
                                 st.write(f"이벤트 발견: ID {event_id}, 시간 {event_date}")  # 디버깅
                                 
@@ -166,40 +166,48 @@ def get_local_pc_events(start_date=None, end_date=None):
                             
                 win32evtlog.CloseEventLog(hand)
                 
+                # 이벤트 로그를 파일로 저장
+                if events:
+                    events_df = pd.DataFrame(events)
+                    events_df.to_csv('pc_events.csv', index=False)
+                
             except Exception as e:
                 st.write(f"이벤트 로그 접근 오류: {str(e)}")  # 디버깅
                 return []
                 
-            if not events:
-                st.write("이벤트를 찾지 못했습니다")  # 디버깅
-            else:
-                st.write(f"{len(events)}개의 이벤트를 찾았습니다")  # 디버깅
         else:
-            st.write("Windows 환경이 아님")  # 디버깅
-            # Windows가 아닌 환경(Streamlit Cloud 등)에서는 더미 데이터 생성
-            if start_date and end_date:
-                current_date = datetime.strptime(start_date, '%Y-%m-%d')
-                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                
-                while current_date <= end_dt:
-                    if current_date.weekday() < 5:  # 0-4: 월-금
-                        start_time = current_date.replace(hour=9, minute=0)
-                        events.append({
-                            'time': start_time,
-                            'type': '시작',
-                            'event_id': 6009,
-                            'computer': platform.node()
-                        })
-                        
-                        end_time = current_date.replace(hour=18, minute=0)
-                        events.append({
-                            'time': end_time,
-                            'type': '종료',
-                            'event_id': 1074,
-                            'computer': platform.node()
-                        })
+            st.write("Cloud 환경 감지됨")  # 디버깅
+            # 저장된 이벤트 로그 파일이 있으면 불러오기
+            if os.path.exists('pc_events.csv'):
+                events_df = pd.read_csv('pc_events.csv')
+                events = events_df.to_dict('records')
+                st.write(f"{len(events)}개의 저장된 이벤트 로그 발견")  # 디버깅
+            else:
+                st.write("저장된 이벤트 로그 없음, 더미 데이터 생성")  # 디버깅
+                # 더미 데이터 생성 (기존 코드)
+                if start_date and end_date:
+                    current_date = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
                     
-                    current_date += timedelta(days=1)
+                    while current_date <= end_dt:
+                        if current_date.weekday() < 5:
+                            start_time = current_date.replace(hour=9, minute=0)
+                            events.append({
+                                'time': start_time,
+                                'type': '시작',
+                                'event_id': 6009,
+                                'computer': platform.node()
+                            })
+                            
+                            end_time = current_date.replace(hour=18, minute=0)
+                            events.append({
+                                'time': end_time,
+                                'type': '종료',
+                                'event_id': 1074,
+                                'computer': platform.node()
+                            })
+                        
+                        current_date += timedelta(days=1)
                     
     except Exception as e:
         st.error(f"이벤트 생성 중 오류 발생: {str(e)}")
@@ -394,7 +402,7 @@ def update_google_sheet(records, employee_name):
                 week_info,              # 주차 정보
                 date,                   # 날짜
                 record.get('PC 시작', ''),  # PC 시작
-                record.get('PC 종료', ''),  # PC 종료
+                record.get('PC 종료', ''),  # PC 종종료
                 record.get('근무시간', ''),  # 근무시간
                 record.get('비고', '')   # 비고
             ])
