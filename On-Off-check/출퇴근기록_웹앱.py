@@ -128,9 +128,14 @@ def get_local_pc_events(start_date=None, end_date=None):
         # Windows 환경인 경우 실제 이벤트 로그 사용
         if os.name == 'nt':
             try:
-                hand = win32evtlog.OpenEventLog(None, "System")
+                server = None  # 로컬 컴퓨터
+                logtype = "System"  # 시스템 로그
+                hand = win32evtlog.OpenEventLog(server, logtype)
+                
                 flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
                 total_records = win32evtlog.GetNumberOfEventLogRecords(hand)
+                
+                st.info(f"총 {total_records}개의 이벤트 로그를 확인합니다...")
                 
                 while True:
                     events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
@@ -140,8 +145,8 @@ def get_local_pc_events(start_date=None, end_date=None):
                     for event in events_raw:
                         try:
                             event_id = event.EventID & 0xFFFF
-                            # 시스템 시작(6005), 시스템 종료(6006), 시스템 재시작(6013) 이벤트도 포함
-                            if event_id in [6009, 1074, 6005, 6006, 6013]:
+                            # 시스템 시작/종료 관련 모든 이벤트 ID 포함
+                            if event_id in [6005, 6006, 6008, 6009, 6013, 1074, 1076, 12, 13]:
                                 event_date = event.TimeGenerated.replace(tzinfo=None)
                                 
                                 if start_date and end_date:
@@ -151,9 +156,9 @@ def get_local_pc_events(start_date=None, end_date=None):
                                         continue
                                 
                                 # 이벤트 타입 결정
-                                if event_id in [6009, 6005, 6013]:
+                                if event_id in [6005, 6009, 6013, 12]:  # 시스템 시작 이벤트
                                     event_type = '시작'
-                                else:
+                                else:  # 시스템 종료 이벤트
                                     event_type = '종료'
                                 
                                 events.append({
@@ -162,6 +167,10 @@ def get_local_pc_events(start_date=None, end_date=None):
                                     'event_id': event_id,
                                     'computer': platform.node()
                                 })
+                                
+                                # 디버깅을 위한 이벤트 정보 출력
+                                st.write(f"이벤트 발견: ID {event_id}, 시간 {event_date}, 타입 {event_type}")
+                                
                         except Exception as e:
                             st.error(f"이벤트 처리 중 오류: {str(e)}")
                             continue
@@ -170,6 +179,8 @@ def get_local_pc_events(start_date=None, end_date=None):
                 
                 if not events:
                     st.warning("Windows 이벤트 로그에서 PC 사용 기록을 찾을 수 없습니다.")
+                else:
+                    st.success(f"{len(events)}개의 PC 사용 기록을 찾았습니다.")
                 
             except Exception as e:
                 st.error(f"Windows 이벤트 로그 접근 오류: {str(e)}")
@@ -248,7 +259,7 @@ def calculate_work_hours(start_time, end_time, date):
     lunch_start = start_time.replace(hour=12, minute=0, second=0)
     lunch_end = start_time.replace(hour=13, minute=0, second=0)
     
-    # 근무시간이 점심심시간을 포함하는 경우
+    # 근무시간이 점심심심시간을 포함하는 경우
     if start_time <= lunch_start and end_time >= lunch_end:
         total_seconds -= 3600  # 1시간(3600초) 제외
     
@@ -610,7 +621,7 @@ def main():
         st.header("🏖️ 휴가 관리")
         
         # 휴가 등록
-        with st.expander("휴휴가 등록"):
+        with st.expander("휴가 등록"):
             holiday_date = st.date_input(
                 "휴가 날짜",
                 datetime.now(),
