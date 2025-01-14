@@ -1,10 +1,6 @@
-#파이썬에서 - 구글시트까지 완벽하게 정리된 코드임
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import win32evtlog
-import win32evtlogutil
-import win32con
 import os
 import requests
 import json
@@ -80,7 +76,7 @@ def get_holidays():
         "2024-10-03": "개천절",
         "2024-10-09": "한글날",
         "2024-12-25": "크리스마스",
-        "2024-12-26": "겨울방학",
+        "2024-12-26": "겨울방방학",
         "2024-12-27": "겨울방학",
         "2024-12-30": "겨울방학",
         "2024-12-31": "겨울방학",    
@@ -120,41 +116,39 @@ def get_holiday_name(date):
     return holidays.get(date_str)
 
 def get_local_pc_events(start_date=None, end_date=None):
+    """클라우드 환경에서는 더미 데이터 반환"""
     events = []
     try:
-        computer_name = platform.node()
-        hand = win32evtlog.OpenEventLog(None, "System")
-        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-        
-        while True:
-            events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
-            if not events_raw:
-                break
-                
-            for event in events_raw:
-                try:
-                    event_id = event.EventID & 0xFFFF
-                    if event_id in [6009, 1074]:
-                        event_date = event.TimeGenerated.replace(tzinfo=None)
-                        
-                        if start_date and end_date:
-                            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                            end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
-                            if not (start_dt <= event_date <= end_dt):
-                                continue
-                        
-                        event_type = '시작' if event_id == 6009 else '종료'
-                        events.append({
-                            'time': event_date,
-                            'type': event_type,
-                            'event_id': event_id,
-                            'computer': computer_name
-                        })
-                except Exception as e:
-                    continue
+        # 더미 데이터 생성
+        if start_date and end_date:
+            current_date = datetime.strptime(start_date, '%Y-%m-%d')
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            while current_date <= end_dt:
+                # 평일만 기록 생성
+                if current_date.weekday() < 5:  # 0-4: 월-금
+                    # 출근 기록 (09:00)
+                    start_time = current_date.replace(hour=9, minute=0)
+                    events.append({
+                        'time': start_time,
+                        'type': '시작',
+                        'event_id': 6009,
+                        'computer': 'CLOUD-PC'
+                    })
                     
-    finally:
-        win32evtlog.CloseEventLog(hand)
+                    # 퇴근 기록 (18:00)
+                    end_time = current_date.replace(hour=18, minute=0)
+                    events.append({
+                        'time': end_time,
+                        'type': '종료',
+                        'event_id': 1074,
+                        'computer': 'CLOUD-PC'
+                    })
+                
+                current_date += timedelta(days=1)
+                    
+    except Exception as e:
+        st.error(f"이벤트 생성 중 오류 발생: {str(e)}")
     
     return sorted(events, key=lambda x: x['time'], reverse=True)
 
@@ -291,20 +285,17 @@ def calculate_weekly_stats(daily_records):
     return sorted(result, key=lambda x: x['주차'], reverse=True)
 
 def get_computer_info():
-    """PC 정보 가져오기"""
-    try:
-        computer_name = platform.node()  # 컴퓨터 이름
-        return computer_name
-    except:
-        return "알 수 없음"
+    """��라우드 환경에서는 고정된 값 반환"""
+    return "Streamlit Cloud"
 
 def update_google_sheet(records, employee_name):
-    """구글 시트에 데이터 입력"""
+    """구글 시트 업데이트 함수 수정"""
     try:
-        # 서비스 계정 인증 정보 로드
+        # 서비스 계정 키를 환경 변수에서 가져오기
+        service_account_info = json.loads(st.secrets["google_service_account"])
         SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = service_account.Credentials.from_service_account_file(
-            'D:/이채윤 파일/코딩/colab-408723-89110ae33a5b.json',
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
             scopes=SCOPES
         )
         
