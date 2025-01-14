@@ -127,13 +127,10 @@ def get_local_pc_events(start_date=None, end_date=None):
     try:
         # Windows 환경인 경우 실제 이벤트 로그 사용
         if os.name == 'nt':
-            st.write("Windows 환경 감지됨")  # 디버깅
             computer_name = platform.node()
             try:
                 hand = win32evtlog.OpenEventLog(None, "System")
                 flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-                total = win32evtlog.GetNumberOfEventLogRecords(hand)
-                st.write(f"총 {total}개의 이벤트 로그 발견")  # 디버깅
                 
                 while True:
                     events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
@@ -145,7 +142,6 @@ def get_local_pc_events(start_date=None, end_date=None):
                             event_id = event.EventID & 0xFFFF
                             if event_id in [6005, 6006, 6008, 6009, 1074]:
                                 event_date = event.TimeGenerated.replace(tzinfo=None)
-                                st.write(f"이벤트 발견: ID {event_id}, 시간 {event_date}")  # 디버깅
                                 
                                 if start_date and end_date:
                                     start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -160,54 +156,17 @@ def get_local_pc_events(start_date=None, end_date=None):
                                     'event_id': event_id,
                                     'computer': computer_name
                                 })
-                        except Exception as e:
-                            st.write(f"이벤트 처리 중 오류: {str(e)}")  # 디버깅
+                        except Exception:
                             continue
                             
                 win32evtlog.CloseEventLog(hand)
                 
-                # 이벤트 로그를 파일로 저장
-                if events:
-                    events_df = pd.DataFrame(events)
-                    events_df.to_csv('pc_events.csv', index=False)
-                
             except Exception as e:
-                st.write(f"이벤트 로그 접근 오류: {str(e)}")  # 디버깅
+                st.error(f"이벤트 로그 접근 오류: {str(e)}")
                 return []
-                
         else:
-            st.write("Cloud 환경 감지됨")  # 디버깅
-            # 저장된 이벤트 로그 파일이 있으면 불러오기
-            if os.path.exists('pc_events.csv'):
-                events_df = pd.read_csv('pc_events.csv')
-                events = events_df.to_dict('records')
-                st.write(f"{len(events)}개의 저장된 이벤트 로그 발견")  # 디버깅
-            else:
-                st.write("저장된 이벤트 로그 없음, 더미 데이터 생성")  # 디버깅
-                # 더미 데이터 생성 (기존 코드)
-                if start_date and end_date:
-                    current_date = datetime.strptime(start_date, '%Y-%m-%d')
-                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                    
-                    while current_date <= end_dt:
-                        if current_date.weekday() < 5:
-                            start_time = current_date.replace(hour=9, minute=0)
-                            events.append({
-                                'time': start_time,
-                                'type': '시작',
-                                'event_id': 6009,
-                                'computer': platform.node()
-                            })
-                            
-                            end_time = current_date.replace(hour=18, minute=0)
-                            events.append({
-                                'time': end_time,
-                                'type': '종료',
-                                'event_id': 1074,
-                                'computer': platform.node()
-                            })
-                        
-                        current_date += timedelta(days=1)
+            st.warning("Windows 환경이 아닙니다. PC 사용 기록을 가져올 수 없습니다.")
+            return []
                     
     except Exception as e:
         st.error(f"이벤트 생성 중 오류 발생: {str(e)}")
