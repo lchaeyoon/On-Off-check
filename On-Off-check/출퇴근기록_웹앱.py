@@ -116,7 +116,7 @@ def get_holiday_name(date):
     return holidays.get(date_str)
 
 def get_local_pc_events(start_date=None, end_date=None):
-    """클라우드 환경에서는 더미 데이터 반환"""
+    """PC 사용 기록 반환"""
     events = []
     try:
         # 더미 데이터 생성
@@ -133,7 +133,7 @@ def get_local_pc_events(start_date=None, end_date=None):
                         'time': start_time,
                         'type': '시작',
                         'event_id': 6009,
-                        'computer': 'CLOUD-PC'
+                        'computer': platform.node()  # 실제 PC 장치명 사용
                     })
                     
                     # 퇴근 기록 (18:00)
@@ -142,7 +142,7 @@ def get_local_pc_events(start_date=None, end_date=None):
                         'time': end_time,
                         'type': '종료',
                         'event_id': 1074,
-                        'computer': 'CLOUD-PC'
+                        'computer': platform.node()  # 실제 PC 장치명 사용
                     })
                 
                 current_date += timedelta(days=1)
