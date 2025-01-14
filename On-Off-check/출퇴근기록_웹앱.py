@@ -125,9 +125,10 @@ def get_local_pc_events(start_date=None, end_date=None):
     """PC 사용 기록 반환"""
     events = []
     try:
-        # Windows 환경인 경우 실제 이벤트 로그 사용
+        computer_name = platform.node()
+        
+        # Windows 환경인 경우 실제 이벤트 로그 사용 및 Google Sheets에 저장
         if os.name == 'nt':
-            computer_name = platform.node()
             try:
                 hand = win32evtlog.OpenEventLog(None, "System")
                 flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
@@ -161,17 +162,104 @@ def get_local_pc_events(start_date=None, end_date=None):
                             
                 win32evtlog.CloseEventLog(hand)
                 
+                # 이벤트를 Google Sheets에 저장
+                if events:
+                    save_events_to_sheet(events)
+                
             except Exception as e:
                 st.error(f"이벤트 로그 접근 오류: {str(e)}")
                 return []
-        else:
-            st.warning("Windows 환경이 아닙니다. PC 사용 기록을 가져올 수 없습니다.")
-            return []
+        
+        # 모든 환경에서 Google Sheets에서 데이터 읽기
+        events = load_events_from_sheet(start_date, end_date, computer_name)
                     
     except Exception as e:
         st.error(f"이벤트 생성 중 오류 발생: {str(e)}")
     
     return sorted(events, key=lambda x: x['time'], reverse=True)
+
+def save_events_to_sheet(events):
+    """이벤트를 Google Sheets에 저장"""
+    try:
+        service_account_info = json.loads(st.secrets["google_service_account"])
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=SCOPES
+        )
+        
+        service = build('sheets', 'v4', credentials=creds)
+        SPREADSHEET_ID = '1-xF7-9VK3Ty5-ARnp0RSqyzrYJXmhW1phaPZTX42SLs'
+        SHEET_NAME = 'PC_Events'  # 새로운 시트
+        
+        values = [[
+            event['time'].strftime('%Y-%m-%d %H:%M:%S'),
+            event['type'],
+            event['event_id'],
+            event['computer']
+        ] for event in events]
+        
+        body = {
+            'values': values
+        }
+        
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f'{SHEET_NAME}!A:D',
+            valueInputOption='RAW',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        
+    except Exception as e:
+        st.error(f"Google Sheets 저장 오류: {str(e)}")
+
+def load_events_from_sheet(start_date=None, end_date=None, computer_name=None):
+    """Google Sheets에서 이벤트 로드"""
+    try:
+        service_account_info = json.loads(st.secrets["google_service_account"])
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=SCOPES
+        )
+        
+        service = build('sheets', 'v4', credentials=creds)
+        SPREADSHEET_ID = '1-xF7-9VK3Ty5-ARnp0RSqyzrYJXmhW1phaPZTX42SLs'
+        SHEET_NAME = 'PC_Events'
+        
+        result = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f'{SHEET_NAME}!A:D'
+        ).execute()
+        
+        values = result.get('values', [])
+        events = []
+        
+        for row in values:
+            if len(row) >= 4:
+                event_time = datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
+                if computer_name and row[3] != computer_name:
+                    continue
+                    
+                if start_date and end_date:
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                    if not (start_dt <= event_time <= end_dt):
+                        continue
+                
+                events.append({
+                    'time': event_time,
+                    'type': row[1],
+                    'event_id': int(row[2]),
+                    'computer': row[3]
+                })
+        
+        return events
+        
+    except Exception as e:
+        st.error(f"Google Sheets 로드 오류: {str(e)}")
+        return []
 
 def format_hours_to_time(hours):
     """시간을 HH:MM 형식으로 변환"""
