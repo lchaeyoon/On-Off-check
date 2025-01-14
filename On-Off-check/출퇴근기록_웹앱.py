@@ -82,7 +82,7 @@ def get_holidays():
         "2024-10-03": "개천절",
         "2024-10-09": "한글날",
         "2024-12-25": "크리스마스",
-        "2024-12-26": "겨울방방학",
+        "2024-12-26": "겨울방학",
         "2024-12-27": "겨울방학",
         "2024-12-30": "겨울방학",
         "2024-12-31": "겨울방학",    
@@ -127,37 +127,53 @@ def get_local_pc_events(start_date=None, end_date=None):
     try:
         # Windows 환경인 경우 실제 이벤트 로그 사용
         if os.name == 'nt':
-            hand = win32evtlog.OpenEventLog(None, "System")
-            flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
-            
-            while True:
-                events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
-                if not events_raw:
-                    break
-                    
-                for event in events_raw:
-                    try:
-                        event_id = event.EventID & 0xFFFF
-                        if event_id in [6009, 1074]:
-                            event_date = event.TimeGenerated.replace(tzinfo=None)
-                            
-                            if start_date and end_date:
-                                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                                end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
-                                if not (start_dt <= event_date <= end_dt):
-                                    continue
-                            
-                            event_type = '시작' if event_id == 6009 else '종료'
-                            events.append({
-                                'time': event_date,
-                                'type': event_type,
-                                'event_id': event_id,
-                                'computer': platform.node()
-                            })
-                    except Exception:
-                        continue
-            
-            win32evtlog.CloseEventLog(hand)
+            try:
+                hand = win32evtlog.OpenEventLog(None, "System")
+                flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+                total_records = win32evtlog.GetNumberOfEventLogRecords(hand)
+                
+                while True:
+                    events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
+                    if not events_raw:
+                        break
+                        
+                    for event in events_raw:
+                        try:
+                            event_id = event.EventID & 0xFFFF
+                            # 시스템 시작(6005), 시스템 종료(6006), 시스템 재시작(6013) 이벤트도 포함
+                            if event_id in [6009, 1074, 6005, 6006, 6013]:
+                                event_date = event.TimeGenerated.replace(tzinfo=None)
+                                
+                                if start_date and end_date:
+                                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                                    end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                                    if not (start_dt <= event_date <= end_dt):
+                                        continue
+                                
+                                # 이벤트 타입 결정
+                                if event_id in [6009, 6005, 6013]:
+                                    event_type = '시작'
+                                else:
+                                    event_type = '종료'
+                                
+                                events.append({
+                                    'time': event_date,
+                                    'type': event_type,
+                                    'event_id': event_id,
+                                    'computer': platform.node()
+                                })
+                        except Exception as e:
+                            st.error(f"이벤트 처리 중 오류: {str(e)}")
+                            continue
+                
+                win32evtlog.CloseEventLog(hand)
+                
+                if not events:
+                    st.warning("Windows 이벤트 로그에서 PC 사용 기록을 찾을 수 없습니다.")
+                
+            except Exception as e:
+                st.error(f"Windows 이벤트 로그 접근 오류: {str(e)}")
+                return []
         
         # Windows가 아닌 환경(Streamlit Cloud 등)에서는 더미 데이터 생성
         else:
@@ -232,7 +248,7 @@ def calculate_work_hours(start_time, end_time, date):
     lunch_start = start_time.replace(hour=12, minute=0, second=0)
     lunch_end = start_time.replace(hour=13, minute=0, second=0)
     
-    # 근무시간이 점심시간을 포함하는 경우
+    # 근무시간이 점심심시간을 포함하는 경우
     if start_time <= lunch_start and end_time >= lunch_end:
         total_seconds -= 3600  # 1시간(3600초) 제외
     
@@ -352,7 +368,7 @@ def update_google_sheet(records, employee_name):
         values = []
         computer_name = get_computer_info()
         
-        # 각 레코드의 주차 정보 계산
+        # 각 레코드의 주차차 정보 계산
         for record in records:
             date = record.get('날짜', '')
             monday, friday = get_week_range(date)
@@ -594,7 +610,7 @@ def main():
         st.header("🏖️ 휴가 관리")
         
         # 휴가 등록
-        with st.expander("휴가 등록"):
+        with st.expander("휴휴가 등록"):
             holiday_date = st.date_input(
                 "휴가 날짜",
                 datetime.now(),
