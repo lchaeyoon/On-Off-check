@@ -10,6 +10,9 @@ from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import win32evtlog
+import win32evtlogutil
+import win32con
 
 def load_custom_holidays():
     """자체 휴가 목록 로드"""
@@ -119,33 +122,65 @@ def get_local_pc_events(start_date=None, end_date=None):
     """PC 사용 기록 반환"""
     events = []
     try:
-        # 더미 데이터 생성
-        if start_date and end_date:
-            current_date = datetime.strptime(start_date, '%Y-%m-%d')
-            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        # Windows 환경인 경우 실제 이벤트 로그 사용
+        if os.name == 'nt':
+            hand = win32evtlog.OpenEventLog(None, "System")
+            flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
             
-            while current_date <= end_dt:
-                # 평일만 기록 생성
-                if current_date.weekday() < 5:  # 0-4: 월-금
-                    # 출근 기록 (09:00)
-                    start_time = current_date.replace(hour=9, minute=0)
-                    events.append({
-                        'time': start_time,
-                        'type': '시작',
-                        'event_id': 6009,
-                        'computer': platform.node()  # 실제 PC 장치명 사용
-                    })
+            while True:
+                events_raw = win32evtlog.ReadEventLog(hand, flags, 0)
+                if not events_raw:
+                    break
                     
-                    # 퇴근 기록 (18:00)
-                    end_time = current_date.replace(hour=18, minute=0)
-                    events.append({
-                        'time': end_time,
-                        'type': '종료',
-                        'event_id': 1074,
-                        'computer': platform.node()  # 실제 PC 장치명 사용
-                    })
+                for event in events_raw:
+                    try:
+                        event_id = event.EventID & 0xFFFF
+                        if event_id in [6009, 1074]:
+                            event_date = event.TimeGenerated.replace(tzinfo=None)
+                            
+                            if start_date and end_date:
+                                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                                end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                                if not (start_dt <= event_date <= end_dt):
+                                    continue
+                            
+                            event_type = '시작' if event_id == 6009 else '종료'
+                            events.append({
+                                'time': event_date,
+                                'type': event_type,
+                                'event_id': event_id,
+                                'computer': platform.node()
+                            })
+                    except Exception:
+                        continue
+            
+            win32evtlog.CloseEventLog(hand)
+        
+        # Windows가 아닌 환경(Streamlit Cloud 등)에서는 더미 데이터 생성
+        else:
+            if start_date and end_date:
+                current_date = datetime.strptime(start_date, '%Y-%m-%d')
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
                 
-                current_date += timedelta(days=1)
+                while current_date <= end_dt:
+                    if current_date.weekday() < 5:  # 0-4: 월-금
+                        start_time = current_date.replace(hour=9, minute=0)
+                        events.append({
+                            'time': start_time,
+                            'type': '시작',
+                            'event_id': 6009,
+                            'computer': platform.node()
+                        })
+                        
+                        end_time = current_date.replace(hour=18, minute=0)
+                        events.append({
+                            'time': end_time,
+                            'type': '종료',
+                            'event_id': 1074,
+                            'computer': platform.node()
+                        })
+                    
+                    current_date += timedelta(days=1)
                     
     except Exception as e:
         st.error(f"이벤트 생성 중 오류 발생: {str(e)}")
